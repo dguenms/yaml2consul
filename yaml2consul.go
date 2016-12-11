@@ -6,22 +6,6 @@ import (
     "github.com/kylelemons/go-gypsy/yaml"
 )
 
-func nodeToMap(node yaml.Node) (yaml.Map) {
-    m, ok := node.(yaml.Map)
-    if !ok {
-        panic(fmt.Sprintf("%v is not of type map", node))
-    }
-    return m
-}
-
-func nodeToList(node yaml.Node) (yaml.List) {
-    m, ok := node.(yaml.List)
-    if !ok {
-        panic(fmt.Sprintf("%v is not of type list", node))
-    }
-    return m
-}
-
 func flatten(m map[string]string, node yaml.Node, key string) (map[string]string) {
     switch c := node.(type) {
         case yaml.Map:
@@ -49,12 +33,6 @@ func main() {
 
     if err != nil {
         panic(err)
-    }
-
-    basemap := file.Root.(yaml.Map)
-
-    for k, v := range basemap {
-        fmt.Printf("%#v -> %#v\n", k, v)
     }
 
     flattened_map := parse(file)
