@@ -1,0 +1,11 @@
+config:
+  attribute: string
+  number: 11
+  object:
+    child_object:
+      child_attribute: child
+    object_attribute: object
+    object_number: 413
+  array:
+    - entry1
+    - entry2
