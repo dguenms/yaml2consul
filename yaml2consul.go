@@ -28,6 +28,10 @@ func parse(file* yaml.File) (map[string]string) {
 }
 
 func main() {
+    if len(os.Args) < 2 {
+        panic("Usage: yaml2consul <yaml file>")
+    }
+
     filename := os.Args[1]
     file, err := yaml.ReadFile(filename)
 
