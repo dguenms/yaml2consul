@@ -5,7 +5,43 @@ import (
     "os"
     "github.com/kylelemons/go-gypsy/yaml"
     "github.com/hashicorp/consul/api"
+    "github.com/aws/aws-sdk-go/aws/session"
+    "github.com/aws/aws-sdk-go/service/kms"
+    "github.com/aws/aws-sdk-go/aws"
 )
+
+type Client struct {
+    kv *api.KV
+    kms *kms.KMS
+    key string
+}
+
+func newClient(profile string, region string, key string) *Client {
+    c := new(Client)
+
+    client, err := api.NewClient(api.DefaultConfig())
+    if err != nil {
+        panic(err)
+    }
+
+    c.kv = client.KV()
+
+    sess, err := session.NewSessionWithOptions(session.Options {
+        Config: aws.Config {
+            Region: aws.String(region),
+        },
+        Profile: profile,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    c.kms = kms.New(sess)
+
+    c.key = key
+
+    return c
+}
 
 func flatten(m map[string]string, node yaml.Node, key string) (map[string]string) {
     switch c := node.(type) {
@@ -28,39 +64,52 @@ func parse(file* yaml.File) (map[string]string) {
     return flatten(make(map[string]string), file.Root, "")
 }
 
-func put(m map[string]string) {
-    client, err := api.NewClient(api.DefaultConfig())
-    if err != nil {
-        panic(err)
-    }
-
-    kv := client.KV()
-
+func (client *Client) put(m map[string]string) {
     for k, v := range m {
-        kvpair := &api.KVPair{Key: k, Value: []byte(v)}
-        _, err = kv.Put(kvpair, nil)
+        kvpair := &api.KVPair{Key: k, Value: client.encrypt(v)}
+        _, err := client.kv.Put(kvpair, nil)
         if err != nil {
             panic(err)
         }
     }
 }
 
-func lookup(prefix string) {
-    client, err := api.NewClient(api.DefaultConfig())
-    if err != nil {
-        panic(err)
-    }
-
-    kv := client.KV()
-
-    kvpairs, _, err := kv.List(prefix, nil)
+func (client *Client) lookup(prefix string) {
+    kvpairs, _, err := client.kv.List(prefix, nil)
     if err != nil {
         panic(err)
     }
 
     for _, kvpair := range kvpairs {
-        fmt.Printf("%v -> %v\n", kvpair.Key, string(kvpair.Value))
+        fmt.Printf("%v -> %v\n", kvpair.Key, string(client.decrypt(kvpair.Value)))
     }
+}
+
+func (client *Client) encrypt(plaintext string) []byte {
+    params := &kms.EncryptInput {
+        KeyId:     aws.String(client.key),
+        Plaintext: []byte(plaintext),
+    }
+    resp, err := client.kms.Encrypt(params)
+
+    if err != nil {
+        panic(err)
+    }
+
+    return resp.CiphertextBlob
+}
+
+func (client *Client) decrypt(ciphertext []byte) []byte {
+    params := &kms.DecryptInput {
+        CiphertextBlob: []byte(ciphertext),
+    }
+    resp, err := client.kms.Decrypt(params)
+
+    if err != nil {
+        panic(err)
+    }
+
+    return resp.Plaintext
 }
 
 func main() {
@@ -81,7 +130,9 @@ func main() {
         fmt.Printf("%#v -> %#v\n", k, v)
     }
 
-    put(flattened_map)
+    client := newClient("learning", "us-west-2", "bd616dec-a26a-4200-a2fd-6898c7e5c0d5")
 
-    lookup("")
+    client.put(flattened_map)
+
+    client.lookup("")
 }
